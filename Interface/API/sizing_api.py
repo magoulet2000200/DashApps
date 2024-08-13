@@ -33,9 +33,11 @@ class API_Connection:
             self.token_data["password"] = password
 
         if side == "staging":
+            self.api_url = 'https://prod.sanuvox.com'
+        if side == "staging":
             self.api_url = 'https://staging.sanuvox.com'
         else:
-            self.api_url = 'http://web:8000' # used with local external network
+            self.api_url = 'http://web:8000' # used with local external network (must have docker external)
 
         self.get_token()
     
@@ -47,7 +49,6 @@ class API_Connection:
         self.created = datetime.now()
         if "refresh_token" not in self.token_data:
             req = requests.post(self.api_url+'/oauth2/token/', data=self.token_data).json()
-            print(f"req: {req}")
             self.token_data['scope'] = req['scope']
             if "refresh_token" in self.token_data:
                 self.token_data['refresh_token'] = req['refresh_token']
@@ -100,64 +101,12 @@ class API_Connection:
 class Sizing_API(API_Connection):
     def __init__(self, side="local", username=None, password=None):
         """
-        Initialize the API connection to the Sizing Pathogen API
+        Initialize the API connection to the Some API
         :param client: which client to use
         """
-        self.root = "/sizing/"
-        client = "sizing_ressource_api"
+        self.root = "/???/"
+        client = "???_???_api"
         super().__init__(
             client=client, grant_type="password",
             side=side, username=username, password=password
         )
-
-    def convert_unit(self, data):
-        return self.request(
-            "unit/convert/", mode="post", data=data)
-
-    def get_odor_list(self):
-        return self.request(
-            "odor/")
-        
-    def get_molecule(self, name=None, sequence=None, cas_rn=None):
-        data = {}
-        if name:
-            data["name"] = name
-        elif sequence:
-            data["sequence"] = sequence
-        elif cas_rn:
-            data["cas_rn"] = cas_rn
-        return self.request(
-            "odor/molecule/", mode="post", data=data)
-    
-    def post_odor_wall(self, data=None):
-        return self.request(
-            "odor/photooxidation/", data=data, mode='post')
-    
-    def post_coil_clean(self, data=None):
-        return self.request(
-            "odor/coilclean/", data=data, mode='post')
-
-
-USERNAME = "user@sanuvox.com"
-PASSWORD = "password"
-if __name__ == "__main__":
-    api = Sizing_API(side="local", username=USERNAME, password=PASSWORD)
-    # resp = api.convert_unit(data={"input": "12000 CFM", "to_unit": "CMH"})
-    resp = api.get_molecule(sequence="H2S").json()
-    print(f"resp: {resp}")
-    if resp["molecule"]["sizeable"]:
-        resp = api.post_odor_wall(data={
-            "cas_rn": resp["molecule"]["cas_rn"],
-            "air_flow": "25000 cfm",
-            "height": "62 inch",
-            "width": "93.5 inch",
-            "odor_concentration": "13 ppm",
-            "air_temperature": "20 degC",
-            "humidity": 40,
-        })
-    else:
-        print("This molecule is not sizeable")
-    try:
-        print(f"resp: {resp.json()}")
-    except:
-        print(f"resp: {resp}")
