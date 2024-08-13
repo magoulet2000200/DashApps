@@ -1,0 +1,1 @@
+config_path = '/prog/Interface/config/conf.ini'

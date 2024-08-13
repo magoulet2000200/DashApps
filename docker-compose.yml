@@ -1,0 +1,21 @@
+services:
+  dash:
+    build: 
+      dockerfile: ./docker/Dockerfile
+    env_file:
+      - ./docker/.env
+    container_name: server
+    ports:
+      - "8070:8080"
+    volumes:
+      - .:/prog:rw
+    privileged: true
+    # tty: true
+    # stdin_open: true
+    networks: # network is for local BE interaction
+      - my-shared-network
+
+networks:
+  my-shared-network:
+    external:
+      name: custom_network

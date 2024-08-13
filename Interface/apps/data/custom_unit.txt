@@ -1,0 +1,12 @@
+# Ratios
+ppb = 1e-9 = PPB
+PPM = ppm
+
+# Volumetric Flow Rate
+[volumetric_flow_rate] = [volume] / [time]
+cubic_feet_per_minute = foot ** 3 / minute = cfm = CFM
+cubic_meter_per_hour = meter ** 3 / hour = cmh = CMH
+
+# Pressure
+[pressure] = [force] / [area]
+millimeter_H2O = millimeter * water * g_0 = mmH2O = mm_H2O

@@ -1,0 +1,7 @@
+dash==2.16.1
+dash-extensions==1.0.15
+pyAesCrypt==6.1.1
+plotly==5.21.0
+pandas==2.2.2
+pint==0.24.3
+chemicals==1.2.0
