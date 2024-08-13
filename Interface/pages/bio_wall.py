@@ -249,8 +249,8 @@ def convert_odor_concentration(od, af_i, af_u, he_i, he_u, wi_i, wi_u, t_i, t_u,
     except Exception as e:
         return f"Temperature: {e}", None, None, None
     # Test
-    USERNAME = "magoulet@sanuvox.com"
-    PASSWORD = "S@nuv0x!"
+    USERNAME = "admin@sanuvox.com"
+    PASSWORD = "sanuvox"
     side = os.environ.get("SIDE_ENV", "local")
     api = Sizing_API(side=side, username=USERNAME, password=PASSWORD)
     resp = api.post_odor_wall(data={
