@@ -7,12 +7,6 @@
 node_modules/
 dist/
 
-# don't upload generated or fetched data
-Interface/certs/temp/*
-Interface/certs/gen/*
-Interface/certs/nvs_part*
-Interface/fw_mem/*
-
 # Compiled Java class files
 *.class
 
