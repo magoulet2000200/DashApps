@@ -15,7 +15,7 @@ app = Dash(
 )
 
 app.layout = html.Div([
-    html.H1(f'Sanuvox DashBoard [{os.environ.get("SIDE_ENV", "Local")}]', style={'textAlign': 'center'}),
+    html.H1(f'Sanuvox Sizing [{os.environ.get("SIDE_ENV", "Local")}]', style={'textAlign': 'center'}),
     dash.page_container
 ])
 
