@@ -27,7 +27,6 @@ class API_Connection:
             'client_id':     api_key['client_id'],
             'client_secret': api_key['client_secret'],
         }
-
         if grant_type == "password":
             self.token_data["username"] = username
             self.token_data["password"] = password
@@ -47,7 +46,6 @@ class API_Connection:
         self.created = datetime.now()
         if "refresh_token" not in self.token_data:
             req = requests.post(self.api_url+'/oauth2/token/', data=self.token_data).json()
-            print(f"req: {req}")
             self.token_data['scope'] = req['scope']
             if "refresh_token" in self.token_data:
                 self.token_data['refresh_token'] = req['refresh_token']
@@ -114,9 +112,12 @@ class Sizing_API(API_Connection):
         return self.request(
             "unit/convert/", mode="post", data=data)
 
-    def get_odor_list(self):
+    def get_odor_list(self, cas_rn=None):
+        data = None
+        if cas_rn:
+            data = {'cas_rn': cas_rn}
         return self.request(
-            "odor/")
+            "odor/", data=data)
         
     def get_molecule(self, name=None, sequence=None, cas_rn=None):
         data = {}
@@ -131,11 +132,11 @@ class Sizing_API(API_Connection):
     
     def post_odor_wall(self, data=None):
         return self.request(
-            "odor/photooxidation/", data=data, mode='post')
+            "odorwall/", data=data, mode='post')
     
     def post_coil_clean(self, data=None):
         return self.request(
-            "odor/coilclean/", data=data, mode='post')
+            "coilclean/", data=data, mode='post')
 
 
 USERNAME = "user@sanuvox.com"

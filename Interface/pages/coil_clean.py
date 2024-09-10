@@ -2,12 +2,17 @@ import os
 import dash
 from dash import html, dcc, callback, Output, Input, State
 import pandas as pd
+import numpy as np
 from API.sizing_api import Sizing_API
 
-import pint
-# from chemicals import CAS_from_any, MW
+import plotly.express as px
+import plotly.graph_objects as go
 
-# TODO:
+import pint
+
+USERNAME = "admin@sanuvox.com"
+PASSWORD = "sanuvox"
+
 ureg = pint.UnitRegistry()
 ureg.load_definitions('./Interface/apps/data/custom_unit.txt')
 Q_ = ureg.Quantity
@@ -29,7 +34,6 @@ layout = html.Div([
     html.Div( children=[
         html.Div([
             html.Form(children=[
-
                 html.Label("Air Flow"),
                 html.Div([
                     dcc.Input(id="CC_air_flow_input", value=35000, type="number", placeholder="Air Flow", style={'width': '20%', 'float': 'left'}),
@@ -50,7 +54,7 @@ layout = html.Div([
 
                 html.Label("Coil Distance"),
                 html.Div([
-                    dcc.Input(id="CC_distance_input", value=20, type="number", placeholder="Width", style={'width': '20%', 'float': 'left'}),
+                    dcc.Input(id="CC_distance_input", value=20, type="number", placeholder="Distance", style={'width': '20%', 'float': 'left'}),
                     dcc.Dropdown(id="CC_distance_unit", value="inch", options=["inch", "mm"], style={'width': '40%', 'float': 'left'}),
                 ], style={'width': '100%', 'float': 'left'}),
 
@@ -62,12 +66,20 @@ layout = html.Div([
                 
                 html.Label("Is Downstream?"),
                 html.Div([
-                    # dcc.Input(id="CC_downstream", value=40, type="number", placeholder="Humidity (%)", style={'width': '20%', 'float': 'left'}),
                     dcc.Checklist(
-                        ['Downstream',],
-                        ['Downstream',],
+                        ['Downstream', 'Auto-placement'], ['Downstream'],
                         id="CC_downstream",
                     )
+                ], style={'width': '100%', 'float': 'left'}),
+
+                html.Label("Row Numbers"),
+                html.Div([
+                    dcc.Input(id="CC_rows_input", type="number", value=1, min=1, placeholder="Rows", style={'width': '20%', 'float': 'left'}),
+                ], style={'width': '100%', 'float': 'left'}),
+
+                html.Label("Column Numbers"),
+                html.Div([
+                    dcc.Input(id="CC_columns_input", type="number", value=1, min=1, placeholder="Columns", style={'width': '20%', 'float': 'left'}),
                 ], style={'width': '100%', 'float': 'left'}),
             ]),
             html.Div([
@@ -77,17 +89,20 @@ layout = html.Div([
         ], style={'width': '40%', 'float': 'left', 'margin': '0% 5%'}),
 
         html.Div(id="resultDiv", children=[
-            dcc.Input(id='CC_resultResponse', readOnly=True, value="Set value and process them"),
-            # dcc.Input(id='CC_resultLamps', readOnly=True, value="Number of lamps"),
-            # dcc.Input(id='CC_resultLamp', readOnly=True, value="Lamp lenght"),
-            # dcc.Input(id='CC_resultResOz', readOnly=True, value="Residual Ozone"),
+            dcc.Textarea(
+                id='CC_resultResponse', readOnly=True,
+                value="Set value and process them!",
+                style={'width': '100%', 'height': 100},
+            ),
+            dcc.Graph(id="CC_graph_irr_coil"),
+            dcc.Graph(id="CC_graph_dis_coil"),
+            dcc.Graph(id="CC_graph_lamp_pos"),
         ], style={'width': '40%', 'float': 'right', 'margin': '0% 5%'}),
 
     ], style={'width': '100%', 'overflow': 'hidden'}),
     html.P("", style={'height':'50px'}),
     html.A(html.Button(f"< Home"), href="/"),
     html.A(html.Button(f"Configuration >"), href="/config/"),
-    html.P(id='CC_placeholder4'),
 ])
 
 
@@ -183,6 +198,9 @@ def convert_temperature(input, unit):
 @callback(
     # Response
     Output('CC_resultResponse', 'value'),
+    Output("CC_graph_irr_coil", "figure"),
+    Output("CC_graph_dis_coil", "figure"),
+    Output("CC_graph_lamp_pos", "figure"),
     # air_flow
     State('CC_air_flow_input', 'value'),
     State('CC_air_flow_unit', 'value'),
@@ -200,11 +218,15 @@ def convert_temperature(input, unit):
     State('CC_temperature_unit', 'value'),
     # humidity
     State('CC_downstream', 'value'),
+    # row
+    State('CC_rows_input', 'value'),
+    # column
+    State('CC_columns_input', 'value'),
     # INPUT
     Input('CC_process', 'n_clicks'),
     prevent_initial_call=True,
 )
-def convert_odor_concentration(af_i, af_u, he_i, he_u, wi_i, wi_u, dist_i, dist_u, t_i, t_u, do_i, n_click):
+def convert_odor_concentration(af_i, af_u, he_i, he_u, wi_i, wi_u, dist_i, dist_u, t_i, t_u, do_i, r_n, c_n, n_click):
     # get air flow
     try:
         af = Q_(af_i, af_u)
@@ -231,27 +253,96 @@ def convert_odor_concentration(af_i, af_u, he_i, he_u, wi_i, wi_u, dist_i, dist_
     except Exception as e:
         return f"Temperature: {e}", None, None, None
     # get humidity
-    print(f"do_i: {do_i}")
-    downstream = False
-    # if do_i < 0:
-    #     return "Humidity must be over 0", None, None, None
-    # elif do_i > 100:
-    #     return "Humidity can't be over 100", None, None, None
+    downstream = 'Downstream' in do_i
+    auto = 'Auto-placement' in do_i
     # Test
-    USERNAME = "admin@sanuvox.com"
-    PASSWORD = "sanuvox"
     side = os.environ.get("SIDE_ENV", "local")
     api = Sizing_API(side=side, username=USERNAME, password=PASSWORD)
-    resp = api.post_coil_clean(data={
-        # TODO: Select virus
-        "air_flow": f"{af}",
-        "height": f"{he}",
-        "width": f"{wi}",
-        "distance": f"{dist}",
-        "air_temperature": f"{t}",
-        # "downstream": downstream,
-    })
     try:
-        return f"SUCCESS!"
-    except:
-        return f"Failed: {resp}"
+        resp = api.post_coil_clean(data={
+            "air_flow": f"{af}",
+            "height": f"{he}",
+            "width": f"{wi}",
+            "distance": f"{dist}",
+            "air_temperature": f"{t}",
+            "downstream": downstream,
+            "auto_placement": auto,
+            "row_nb": r_n,
+            "column_nb": c_n,
+        })
+        data = resp['data']
+        irr = np.array(data.pop('irridiance_matrix'))
+        index = pd.Series(range(0, 50))* (he_i/50.0)
+        columns = pd.Series(range(0, 50)) * (wi_i/50.0)
+        df = pd.DataFrame(
+            data=irr,
+            index=index,
+            columns=columns,
+        )
+
+        sh_0, sh_1 = df.shape
+        y, x = np.linspace(0, he_i, sh_0), np.linspace(0, wi_i, sh_1)
+        z = df.values
+        fig1 = go.Figure(
+            data=go.Heatmap(
+                z=z, x=x, y=y,
+                colorbar={"title": "uW/cm2"},
+                zsmooth='best',
+                hoverongaps=False,
+                colorscale=[
+                    [0,     "red"],
+                    [0.100, "orange"],
+                    [0.250, "green"],
+                    [0.300, "darkgreen"],
+                    [0.700, "blue"],
+                    [1.000, "white"],
+                ],
+                zmin=0, zmax=1000,
+            ),
+            layout=go.Layout(
+                title="Irradiance At Coil Surface",
+                width=800, height=400)
+        )
+        fig1.update_layout(
+            xaxis_title="Width (Inch)",
+            yaxis_title="Height (Inch)",
+        )
+        lamps = data["lamps_position_matrix"]
+        lamp_len = data["lamp_length"].split()
+        # Add shapes
+        for lamp in lamps:
+            x0 = lamp[0]
+            y0 = lamp[1]
+            fig1.add_shape(type="line",
+                x0=x0, y0=y0, x1=x0+float(lamp_len[0]), y1=y0,
+                line=dict(color="darkviolet", width=5)
+            )
+
+        df_z = (df > 250).map(lambda x: 1 if x else 0)
+        perc = df_z.sum().sum() / (df_z.shape[0] * df_z.shape[1])
+
+        z = df_z.values
+        fig2 = go.Figure(
+            data=go.Heatmap(
+                z=z, x=x, y=y,
+                colorbar={"title": "{:.0%}".format(perc)},
+                zsmooth='best',
+                hoverongaps=False,
+                colorscale=[
+                    [0,     "dimgray"],
+                    [1.000, "aqua"],
+                ],
+                zmin=0, zmax=1,
+            ),
+            layout=go.Layout(
+                title="Irradiance over 250 mW/cm2 At Coil Surface",
+                width=800, height=400)
+        )
+        fig2.update_layout(
+            xaxis_title="Width (Inch)",
+            yaxis_title="Height (Inch)",
+        )
+
+        return f"SUCCESS: {data}", fig1, fig2, None
+    except Exception as e:
+        return f"FAILED: {e}", None, None, None

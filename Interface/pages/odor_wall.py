@@ -7,6 +7,9 @@ from API.sizing_api import Sizing_API
 import pint
 # from chemicals import CAS_from_any, MW
 
+USERNAME = "admin@sanuvox.com"
+PASSWORD = "sanuvox"
+
 # TODO:
 ureg = pint.UnitRegistry()
 ureg.load_definitions('./Interface/apps/data/custom_unit.txt')
@@ -23,7 +26,12 @@ config = configparser.ConfigParser()
 config.read(config_path)
 
 
-df = pd.read_csv("./Interface/apps/data/c_threshold.csv")
+side = os.environ.get("SIDE_ENV", "local")
+api = Sizing_API(side=side, username=USERNAME, password=PASSWORD)
+data = api.get_odor_list()
+df = pd.DataFrame(data["odors"])
+df["filter_name"] = (df["name"] + " ("+ df["cas_rn"] + ")")
+
 layout = html.Div([
     html.H2(children='Odor Wall', style={'textAlign': 'center'}),
     html.Div(id="main_comm_view", children=[
@@ -31,7 +39,7 @@ layout = html.Div([
             html.Form(children=[
                 html.Label("Odor"),
                 html.Div([
-                    dcc.Dropdown(id="OW_odor_choice", value=df["name"].iloc[0], options=list(df["name"]), style={'width': '40%', 'float': 'left'}),
+                    dcc.Dropdown(id="OW_odor_choice", value=df["filter_name"].iloc[0], options=list(df["filter_name"]), style={'width': '80%', 'float': 'left'}),
                 ], style={'width': '100%', 'float': 'left'}),
 
                 html.Label("Air Flow"),
@@ -52,23 +60,20 @@ layout = html.Div([
                     dcc.Dropdown(id="OW_width_unit", value="inch", options=["inch", "mm"], style={'width': '40%', 'float': 'left'}),
                 ], style={'width': '100%', 'float': 'left'}),
 
-                # "air_temperature": "25 degC",
                 html.Label("Air Temperature"),
                 html.Div([
                     dcc.Input(id="OW_temperature_input", type="number", value=25, placeholder="Temperature", style={'width': '20%', 'float': 'left'}),
                     dcc.Dropdown(id="OW_temperature_unit", value="°C", options=["°C", "°F"], style={'width': '40%', 'float': 'left'}),
                 ], style={'width': '100%', 'float': 'left'}),
                 
-                # "humidity": 40,
                 html.Label("Air Humidity (%)"),
                 html.Div([
                     dcc.Input(id="OW_humidity_input", value=40, type="number", placeholder="Humidity (%)", style={'width': '20%', 'float': 'left'}),
                 ], style={'width': '100%', 'float': 'left'}),
 
-                # "odor_concentration": "12 ppm",
                 html.Label("Odor Concentration"),
                 html.Div([
-                    dcc.Input(id="OW_concentration_input", type="number", value=0, placeholder="Concentration", style={'width': '20%', 'float': 'left'}),
+                    dcc.Input(id="OW_concentration_input", type="number", value=10, placeholder="Concentration", style={'width': '20%', 'float': 'left'}),
                     dcc.Dropdown(id="OW_concentration_unit", value="ppm", options=["ppm", "ppb"], style={'width': '40%', 'float': 'left'}),
                 ], style={'width': '100%', 'float': 'left'}),
             ]),
@@ -79,11 +84,13 @@ layout = html.Div([
         ], style={'width': '40%', 'float': 'left', 'margin': '0% 5%'}),
 
         html.Div(children=[
-            dcc.Input(id='OW_resultResponse', readOnly=True, value="Set value and process them"),
-            dcc.Input(id='OW_resultLamps', readOnly=True, value="Number of lamps"),
-            dcc.Input(id='OW_resultLamp', readOnly=True, value="Lamp lenght"),
-            dcc.Input(id='OW_resultResOz', readOnly=True, value="Residual Ozone"),
-        ]),#, style={'width': '40%', 'float': 'right', 'margin': '0% 5%'}),
+            dcc.Textarea(
+                id='OW_resultResponse',
+                readOnly=True,
+                value="Set value and process them!",
+                style={'width': '100%', 'height': 100},
+            ),
+        ], style={'width': '40%', 'float': 'right', 'margin': '0% 5%'}),
 
     ], style={'width': '100%', 'overflow': 'hidden'}),
     html.P("", style={'height':'50px'}),
@@ -91,6 +98,21 @@ layout = html.Div([
     html.A(html.Button(f"Configuration >"), href="/config/"),
     html.P(id='OW_placeholder4'),
 ])
+
+
+# @callback(
+#     Output('OW_odor_choice', 'value'),
+#     Output('OW_odor_choice', 'options'),
+#     Input('OW_placeholder4', 'children'),
+#     # prevent_initial_call=True,
+# )
+# def get_odor(style):
+#     side = os.environ.get("SIDE_ENV", "local")
+#     api = Sizing_API(side=side, username=USERNAME, password=PASSWORD)
+#     data = api.get_odor_list()
+#     df = pd.DataFrame(data["odors"])
+#     return df["name"][0], list(df["name"])
+
 
 
 @callback(
@@ -186,9 +208,6 @@ def convert_odor_concentration(input, unit):
 @callback(
     # Response
     Output('OW_resultResponse', 'value'),
-    Output('OW_resultLamps', 'value'),
-    Output('OW_resultLamp', 'value'),
-    Output('OW_resultResOz', 'value'),
     # odor
     State('OW_odor_choice', 'value'),
     # air_flow
@@ -215,42 +234,40 @@ def convert_odor_concentration(input, unit):
 def convert_odor_concentration(od, af_i, af_u, he_i, he_u, wi_i, wi_u, t_i, t_u, hu_i, c_i, c_u, n_click):
     # get CAS
     try:
-        cas = df[df["name"] == od]["cas_rn"].iloc[0]
+        cas = df[df["filter_name"] == od]["cas_rn"].iloc[0]
     except Exception as e:
-        return f"Could not retreive odor!", None, None, None
+        return f"Could not retreive odor!"
     # get air flow
     try:
         af = Q_(af_i, af_u)
     except Exception as e:
-        return f"Air Flow: {e}", None, None, None
+        return f"Air Flow: {e}"
     # get vent height
     try:
         he = Q_(he_i, he_u)
     except Exception as e:
-        return f"height: {e}", None, None, None
+        return f"height: {e}"
     # get vent width
     try:
         wi = Q_(wi_i, wi_u)
     except Exception as e:
-        return f"Width: {e}", None, None, None
+        return f"Width: {e}"
     # get temperature
     try:
         t = Q_(t_i, t_u)
     except Exception as e:
-        return f"Temperature: {e}", None, None, None
+        return f"Temperature: {e}"
     # get humidity
     if hu_i < 0:
-        return "Humidity must be over 0", None, None, None
+        return "Humidity must be over 0"
     elif hu_i > 100:
-        return "Humidity can't be over 100", None, None, None
+        return "Humidity can't be over 100"
     # get odor concentraion
     try:
         c = Q_(c_i, c_u)
     except Exception as e:
-        return f"Temperature: {e}", None, None, None
+        return f"Temperature: {e}"
     # Test
-    USERNAME = "admin@sanuvox.com"
-    PASSWORD = "sanuvox"
     side = os.environ.get("SIDE_ENV", "local")
     api = Sizing_API(side=side, username=USERNAME, password=PASSWORD)
     resp = api.post_odor_wall(data={
@@ -263,6 +280,6 @@ def convert_odor_concentration(od, af_i, af_u, he_i, he_u, wi_i, wi_u, t_i, t_u,
         "humidity": hu_i,
     })
     try:
-        return f"SUCCESS!", f"{resp['data']['required_lamps']} lamps", resp['data']['lamp_length'], resp['data']['residual_ozone']
+        return f"SUCCESS: {resp['data']}"
     except:
-        return f"Failed: {resp}", None, None, None
+        return f"FAILED: {resp}"

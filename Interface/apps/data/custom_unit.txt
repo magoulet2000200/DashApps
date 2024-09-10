@@ -10,3 +10,8 @@ cubic_meter_per_hour = meter ** 3 / hour = cmh = CMH
 # Pressure
 [pressure] = [force] / [area]
 millimeter_H2O = millimeter * water * g_0 = mmH2O = mm_H2O
+
+# Irradiance
+[intensity] = [power] / [area]
+microwatt_per_square_centimeter = 1e-6 watt / centimeter **2 = uWscm
+watt_per_square_meter = watt / meter **2 = WSM = wsm

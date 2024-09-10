@@ -1,15 +1,24 @@
 services:
   dash:
-    build: 
+    build:
+      context: .
       dockerfile: ./docker/Dockerfile
     env_file:
       - ./docker/.env
     container_name: server
+    command: python Interface/app.py
+    environment:
+      - DEBUG=True
     ports:
       - "8070:8080"
     volumes:
-      - .:/prog:rw
-    privileged: true
+      - ./:/prog/:rw
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./Interface/
+          target: /prog/Interface/
+    # privileged: true
     # tty: true
     # stdin_open: true
     networks: # network is for local BE interaction
@@ -17,5 +26,5 @@ services:
 
 networks:
   my-shared-network:
-    external:
-      name: custom_network
+    external: true
+    name: custom_network
