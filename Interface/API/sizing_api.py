@@ -33,8 +33,10 @@ class API_Connection:
 
         if side == "staging":
             self.api_url = 'https://staging.sanuvox.com'
-        else:
+        elif side == "local":
             self.api_url = 'http://web:8000' # used with local external network
+        else:
+            self.api_url = 'http://127.0.0.1:8000' # used with local external network
 
         self.get_token()
     

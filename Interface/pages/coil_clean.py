@@ -10,9 +10,16 @@ import plotly.graph_objects as go
 
 import pint
 
-USERNAME = "admin@sanuvox.com"
-PASSWORD = "sanuvox"
-
+USERNAME = "user@sanuvox.com"
+PASSWORD = "password"
+PRICE_COLUMNS = {
+    'product_number': 'Product Number', 
+    'quantity': 'Quantity',
+    'unit_price_CAD': 'Unit Price CAD',
+    'unit_price_USD': 'Unit Price USD',
+    'total_price_CAD': 'Total Price CAD',
+    'total_price_USD': 'Total Price USD',
+}
 ureg = pint.UnitRegistry()
 ureg.load_definitions('./Interface/apps/data/custom_unit.txt')
 Q_ = ureg.Quantity
@@ -86,7 +93,7 @@ layout = html.Div([
                 html.P("", style={'height':'50px'}),
                 html.Button("Process", id="CC_process"),
             ], style={'width': '100%', 'float': 'left'}),
-        ], style={'width': '40%', 'float': 'left', 'margin': '0% 5%'}),
+        ], style={'width': '30%', 'float': 'left', 'margin': '0% 5%'}),
 
         html.Div(id="resultDiv", children=[
             dcc.Textarea(
@@ -94,10 +101,11 @@ layout = html.Div([
                 value="Set value and process them!",
                 style={'width': '100%', 'height': 100},
             ),
+            dash.dash_table.DataTable(columns=[{"id": i, "name": v} for i, v in PRICE_COLUMNS.items()], id="CC_table_price"),
             dcc.Graph(id="CC_graph_irr_coil"),
             dcc.Graph(id="CC_graph_dis_coil"),
             dcc.Graph(id="CC_graph_lamp_pos"),
-        ], style={'width': '40%', 'float': 'right', 'margin': '0% 5%'}),
+        ], style={'width': '50%', 'float': 'right', 'margin': '0% 5%'}),
 
     ], style={'width': '100%', 'overflow': 'hidden'}),
     html.P("", style={'height':'50px'}),
@@ -201,6 +209,7 @@ def convert_temperature(input, unit):
     Output("CC_graph_irr_coil", "figure"),
     Output("CC_graph_dis_coil", "figure"),
     Output("CC_graph_lamp_pos", "figure"),
+    Output("CC_table_price", "data"),
     # air_flow
     State('CC_air_flow_input', 'value'),
     State('CC_air_flow_unit', 'value'),
@@ -231,27 +240,27 @@ def convert_odor_concentration(af_i, af_u, he_i, he_u, wi_i, wi_u, dist_i, dist_
     try:
         af = Q_(af_i, af_u)
     except Exception as e:
-        return f"Air Flow: {e}", None, None, None
+        return f"Air Flow: {e}", None, None, None, None
     # get vent height
     try:
         he = Q_(he_i, he_u)
     except Exception as e:
-        return f"height: {e}", None, None, None
+        return f"height: {e}", None, None, None, None
     # get vent width
     try:
         wi = Q_(wi_i, wi_u)
     except Exception as e:
-        return f"Width: {e}", None, None, None
+        return f"Width: {e}", None, None, None, None
     # get coil distance
     try:
         dist = Q_(dist_i, dist_u)
     except Exception as e:
-        return f"Width: {e}", None, None, None
+        return f"Width: {e}", None, None, None, None
     # get temperature
     try:
         t = Q_(t_i, t_u)
     except Exception as e:
-        return f"Temperature: {e}", None, None, None
+        return f"Temperature: {e}", None, None, None, None
     # get humidity
     downstream = 'Downstream' in do_i
     auto = 'Auto-placement' in do_i
@@ -272,6 +281,21 @@ def convert_odor_concentration(af_i, af_u, he_i, he_u, wi_i, wi_u, dist_i, dist_
         })
         data = resp['data']
         irr = np.array(data.pop('irridiance_matrix'))
+
+        res = 800
+        if he_i < wi_i:
+            height_ratio = int(res * (he_i/wi_i))
+            width_ratio  = res
+            # Adjust Height
+            if height_ratio < 230:
+                height_ratio = 230
+        else:
+            height_ratio = res
+            width_ratio  = int(res * (wi_i/he_i))
+            # Adjust Width
+            if width_ratio < 230:
+                width_ratio = 230
+
         index = pd.Series(range(0, 50))* (he_i/50.0)
         columns = pd.Series(range(0, 50)) * (wi_i/50.0)
         df = pd.DataFrame(
@@ -279,14 +303,16 @@ def convert_odor_concentration(af_i, af_u, he_i, he_u, wi_i, wi_u, dist_i, dist_
             index=index,
             columns=columns,
         )
-
+        # TODO: arrange ratio problem
         sh_0, sh_1 = df.shape
         y, x = np.linspace(0, he_i, sh_0), np.linspace(0, wi_i, sh_1)
         z = df.values
         fig1 = go.Figure(
             data=go.Heatmap(
                 z=z, x=x, y=y,
-                colorbar={"title": "uW/cm2"},
+                colorbar={
+                    "title": "uW/cm2",
+                },
                 zsmooth='best',
                 hoverongaps=False,
                 colorscale=[
@@ -301,13 +327,14 @@ def convert_odor_concentration(af_i, af_u, he_i, he_u, wi_i, wi_u, dist_i, dist_
             ),
             layout=go.Layout(
                 title="Irradiance At Coil Surface",
-                width=800, height=400)
+                width=width_ratio, height=height_ratio,
+            )
         )
         fig1.update_layout(
             xaxis_title="Width (Inch)",
             yaxis_title="Height (Inch)",
         )
-        lamps = data["lamps_position_matrix"]
+        lamps = data.pop("lamps_position_matrix")
         lamp_len = data["lamp_length"].split()
         # Add shapes
         for lamp in lamps:
@@ -336,13 +363,30 @@ def convert_odor_concentration(af_i, af_u, he_i, he_u, wi_i, wi_u, dist_i, dist_
             ),
             layout=go.Layout(
                 title="Irradiance over 250 mW/cm2 At Coil Surface",
-                width=800, height=400)
+                width=width_ratio, height=height_ratio)
         )
         fig2.update_layout(
             xaxis_title="Width (Inch)",
             yaxis_title="Height (Inch)",
         )
 
-        return f"SUCCESS: {data}", fig1, fig2, None
+        # price table
+        pricing = data.pop('pricing')
+        total_CAD = 0
+        total_USD = 0
+        for i in range(len(pricing)):
+            total_CAD += pricing[i]['total_price_CAD']
+            pricing[i]['unit_price_CAD'] = "${:,.2f} CAD".format(pricing[i]['unit_price_CAD'])
+            pricing[i]['total_price_CAD'] = "${:,.2f} CAD".format(pricing[i]['total_price_CAD'])
+            total_USD += float(pricing[i]['total_price_USD'])
+            pricing[i]['unit_price_USD'] = "${:,.2f} USD".format(pricing[i]['unit_price_USD'])
+            pricing[i]['total_price_USD'] = "${:,.2f} USD".format(pricing[i]['total_price_USD'])
+        pricing.append({
+            "product_number": "Total",
+            "total_price_CAD": "${:,.2f} CAD".format(total_CAD),
+            "total_price_USD": "${:,.2f} USD".format(total_USD),
+        })
+
+        return f"SUCCESS: {data}", fig1, fig2, None, pricing
     except Exception as e:
-        return f"FAILED: {e}", None, None, None
+        return f"FAILED: {e}", None, None, None, None

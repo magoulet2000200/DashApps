@@ -5,10 +5,10 @@ import pandas as pd
 from API.sizing_api import Sizing_API
 
 import pint
-# from chemicals import CAS_from_any, MW
 
-USERNAME = "admin@sanuvox.com"
-PASSWORD = "sanuvox"
+
+USERNAME = "user@sanuvox.com"
+PASSWORD = "password"
 
 # TODO:
 ureg = pint.UnitRegistry()
@@ -21,6 +21,14 @@ from config import config_path
 
 dash.register_page(__name__, path='/odor_wall/')
 
+PRICE_COLUMNS = {
+    'product_number': 'Product Number', 
+    'quantity': 'Quantity',
+    'unit_price_CAD': 'Unit Price CAD',
+    'unit_price_USD': 'Unit Price USD',
+    'total_price_CAD': 'Total Price CAD',
+    'total_price_USD': 'Total Price USD',
+}
 
 config = configparser.ConfigParser()
 config.read(config_path)
@@ -90,6 +98,7 @@ layout = html.Div([
                 value="Set value and process them!",
                 style={'width': '100%', 'height': 100},
             ),
+            dash.dash_table.DataTable(columns=[{"id": i, "name": v} for i, v in PRICE_COLUMNS.items()], id="OW_table_price"),
         ], style={'width': '40%', 'float': 'right', 'margin': '0% 5%'}),
 
     ], style={'width': '100%', 'overflow': 'hidden'}),
@@ -98,21 +107,6 @@ layout = html.Div([
     html.A(html.Button(f"Configuration >"), href="/config/"),
     html.P(id='OW_placeholder4'),
 ])
-
-
-# @callback(
-#     Output('OW_odor_choice', 'value'),
-#     Output('OW_odor_choice', 'options'),
-#     Input('OW_placeholder4', 'children'),
-#     # prevent_initial_call=True,
-# )
-# def get_odor(style):
-#     side = os.environ.get("SIDE_ENV", "local")
-#     api = Sizing_API(side=side, username=USERNAME, password=PASSWORD)
-#     data = api.get_odor_list()
-#     df = pd.DataFrame(data["odors"])
-#     return df["name"][0], list(df["name"])
-
 
 
 @callback(
@@ -208,6 +202,7 @@ def convert_odor_concentration(input, unit):
 @callback(
     # Response
     Output('OW_resultResponse', 'value'),
+    Output("OW_table_price", "data"),
     # odor
     State('OW_odor_choice', 'value'),
     # air_flow
@@ -236,37 +231,37 @@ def convert_odor_concentration(od, af_i, af_u, he_i, he_u, wi_i, wi_u, t_i, t_u,
     try:
         cas = df[df["filter_name"] == od]["cas_rn"].iloc[0]
     except Exception as e:
-        return f"Could not retreive odor!"
+        return f"Could not retreive odor!", None
     # get air flow
     try:
         af = Q_(af_i, af_u)
     except Exception as e:
-        return f"Air Flow: {e}"
+        return f"Air Flow: {e}", None
     # get vent height
     try:
         he = Q_(he_i, he_u)
     except Exception as e:
-        return f"height: {e}"
+        return f"height: {e}", None
     # get vent width
     try:
         wi = Q_(wi_i, wi_u)
     except Exception as e:
-        return f"Width: {e}"
+        return f"Width: {e}", None
     # get temperature
     try:
         t = Q_(t_i, t_u)
     except Exception as e:
-        return f"Temperature: {e}"
+        return f"Temperature: {e}", None
     # get humidity
     if hu_i < 0:
-        return "Humidity must be over 0"
+        return "Humidity must be over 0", None
     elif hu_i > 100:
-        return "Humidity can't be over 100"
+        return "Humidity can't be over 100", None
     # get odor concentraion
     try:
         c = Q_(c_i, c_u)
     except Exception as e:
-        return f"Temperature: {e}"
+        return f"Temperature: {e}", None
     # Test
     side = os.environ.get("SIDE_ENV", "local")
     api = Sizing_API(side=side, username=USERNAME, password=PASSWORD)
@@ -280,6 +275,22 @@ def convert_odor_concentration(od, af_i, af_u, he_i, he_u, wi_i, wi_u, t_i, t_u,
         "humidity": hu_i,
     })
     try:
-        return f"SUCCESS: {resp['data']}"
+        data = resp['data']
+        pricing = data.pop('pricing')
+        total_CAD = 0
+        total_USD = 0
+        for i in range(len(pricing)):
+            total_CAD += pricing[i]['total_price_CAD']
+            pricing[i]['unit_price_CAD'] = "${:,.2f} CAD".format(pricing[i]['unit_price_CAD'])
+            pricing[i]['total_price_CAD'] = "${:,.2f} CAD".format(pricing[i]['total_price_CAD'])
+            total_USD += float(pricing[i]['total_price_USD'])
+            pricing[i]['unit_price_USD'] = "${:,.2f} USD".format(pricing[i]['unit_price_USD'])
+            pricing[i]['total_price_USD'] = "${:,.2f} USD".format(pricing[i]['total_price_USD'])
+        pricing.append({
+            "product_number": "Total",
+            "total_price_CAD": "${:,.2f} CAD".format(total_CAD),
+            "total_price_USD": "${:,.2f} USD".format(total_USD),
+        })
+        return f"SUCCESS: {data}", pricing
     except:
-        return f"FAILED: {resp}"
+        return f"FAILED: {resp}", None
